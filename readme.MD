@@ -14,6 +14,47 @@ Il illustre une **architecture distribuée standardisée** utilisée par tous le
 
 Le projet est entièrement lançable en local via **Docker Compose**.
 
+```mermaid
+flowchart LR
+  %% Clients & UIs
+  U["Client<br/>(curl / navigateur)"]
+  T_UI["Traefik dashboard<br/>:8081"]
+  KC_UI["Keycloak UI<br/>:8082"]
+  RMQ_UI["RabbitMQ UI<br/>:15672"]
+
+  %% Core components
+  T["Traefik<br/>API Gateway :8080"]
+  KC["Keycloak<br/>Identity Provider"]
+  A["Service A<br/>Publisher"]
+  B["Service B<br/>Consumer"]
+  RMQ[("RabbitMQ<br/>Message Broker")]
+  PG[("PostgreSQL<br/>Database")]
+
+  %% Access to UIs
+  U -->|"Open UI"| T_UI
+  U -->|"Open UI"| KC_UI
+  U -->|"Open UI"| RMQ_UI
+
+  %% Entry point
+  U -->|"HTTP"| T
+
+  %% Auth path (for protected routes)
+  T -->|"JWT validation"| KC
+
+  %% Gateway routes
+  T -->|"POST /api/a/action"| A
+  T -->|"GET /api/a/health"| A
+
+  T -->|"GET /api/b/events"| B
+  T -->|"GET /api/b/health"| B
+
+  %% Async flow
+  A -->|"publish event"| RMQ
+  RMQ -->|"consume event"| B
+  B -->|"INSERT events"| PG
+  B -->|"SELECT events"| PG
+```
+
 ---
 
 ## 2. Architecture globale
