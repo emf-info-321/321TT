@@ -40,9 +40,13 @@ async function initRabbitWithRetry(maxRetries = 30, delayMs = 1000) {
   }
 }
 
+<<<<<<< HEAD
 
 
 app.get("/health", async (req, res) => {
+=======
+app.get("/api/a/health", async (req, res) => {
+>>>>>>> 9eb1e77149fd627845fc26edc0703581ceb25f07
   res.json({
     status: "UP",
     service: "service-a",
