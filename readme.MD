@@ -113,10 +113,6 @@ curl http://localhost:8080/api/a/health
 curl http://localhost:8080/api/b/health
 ```
 
-Status global
-```bash
-curl http://localhost:8080/status
-```
 
 ➡️ Le status global agrège l’état de tous les composants du système.
 
