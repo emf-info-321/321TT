@@ -24,11 +24,23 @@ const jwtCheck = expressjwt({
 
 let channel;
 
-async function initRabbit() {
-  const conn = await amqp.connect(RABBITMQ_URL);
-  channel = await conn.createChannel();
-  await channel.assertQueue(QUEUE_NAME, { durable: true });
+async function initRabbitWithRetry(maxRetries = 30, delayMs = 1000) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const conn = await amqp.connect(RABBITMQ_URL);
+      channel = await conn.createChannel();
+      await channel.assertQueue(QUEUE_NAME, { durable: true });
+      console.log(`[service-a] RabbitMQ connected (attempt ${attempt})`);
+      return;
+    } catch (e) {
+      console.warn(`[service-a] RabbitMQ not ready (attempt ${attempt}/${maxRetries})`);
+      if (attempt === maxRetries) throw e;
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
+  }
 }
+
+
 
 app.get("/health", async (req, res) => {
   res.json({
@@ -53,7 +65,7 @@ app.post("/api/a/action", jwtCheck, async (req, res) => {
   res.json({ ok: true, published: event });
 });
 
-initRabbit()
+initRabbitWithRetry()
   .then(() => app.listen(PORT, () => console.log(`service-a on ${PORT}`)))
   .catch((e) => {
     console.error("Rabbit init failed", e);

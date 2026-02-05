@@ -24,29 +24,39 @@ async function initDb() {
   `);
 }
 
-async function initRabbit() {
-  const conn = await amqp.connect(RABBITMQ_URL);
-  channel = await conn.createChannel();
-  await channel.assertQueue(QUEUE_NAME, { durable: true });
-
-  channel.consume(QUEUE_NAME, async (msg) => {
-    if (!msg) return;
-    const event = JSON.parse(msg.content.toString());
-
-    // Idempotence: ignore si id déjà inséré
+async function initRabbitWithRetry(maxRetries = 30, delayMs = 1000) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      await pool.query(
-        "INSERT INTO events (id, event_type, ts, actor, payload) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (id) DO NOTHING",
-        [event.id, event.eventType, event.timestamp, event.actor ?? null, event.payload ?? {}]
-      );
-      channel.ack(msg);
+      const conn = await amqp.connect(RABBITMQ_URL);
+      channel = await conn.createChannel();
+      await channel.assertQueue(QUEUE_NAME, { durable: true });
+
+      channel.consume(QUEUE_NAME, async (msg) => {
+        if (!msg) return;
+        const event = JSON.parse(msg.content.toString());
+
+        try {
+          await pool.query(
+            "INSERT INTO events (id, event_type, ts, actor, payload) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (id) DO NOTHING",
+            [event.id, event.eventType, event.timestamp, event.actor ?? null, event.payload ?? {}]
+          );
+          channel.ack(msg);
+        } catch (e) {
+          console.error("DB insert failed", e);
+          channel.nack(msg, false, false);
+        }
+      });
+
+      console.log(`[service-b] RabbitMQ connected (attempt ${attempt})`);
+      return;
     } catch (e) {
-      console.error("DB insert failed", e);
-      // Requeue false évite boucle infinie; à discuter en cours
-      channel.nack(msg, false, false);
+      console.warn(`[service-b] RabbitMQ not ready (attempt ${attempt}/${maxRetries})`);
+      if (attempt === maxRetries) throw e;
+      await new Promise((r) => setTimeout(r, delayMs));
     }
-  });
+  }
 }
+
 
 app.get("/health", async (req, res) => {
   let db = "DOWN";
@@ -62,7 +72,7 @@ app.get("/api/b/events", async (req, res) => {
   res.json(r.rows);
 });
 
-Promise.all([initDb(), initRabbit()])
+Promise.all([initDb(), initRabbitWithRetry()])
   .then(() => app.listen(PORT, () => console.log(`service-b on ${PORT}`)))
   .catch((e) => {
     console.error("Init failed", e);
