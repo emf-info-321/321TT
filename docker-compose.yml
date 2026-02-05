@@ -1,0 +1,107 @@
+services:
+  traefik:
+    image: traefik:v3.1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/traefik.yml:/traefik.yml:ro
+    command:
+      - --configFile=/traefik.yml
+    ports:
+      - "8080:80"
+      - "8081:8080"
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: appdb
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d appdb"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "15672:15672" # UI RabbitMQ (option pour toi)
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:25.0.6
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    volumes:
+      - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
+    ports:
+      - "8082:8080" # accès direct Keycloak (optionnel; sinon via Traefik)
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080 && echo -e 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\n\r\n' >&3 && head -n 1 <&3 | grep -q '200'"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  service-a:
+    build: ./services/service-a
+    environment:
+      PORT: 3000
+      RABBITMQ_URL: amqp://rabbitmq:5672
+      QUEUE_NAME: events.demo
+      KEYCLOAK_ISSUER: http://keycloak:8080/realms/mini321
+      JWKS_URI: http://keycloak:8080/realms/mini321/protocol/openid-connect/certs
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.servicea.rule=PathPrefix(`/api/a`)
+      - traefik.http.routers.servicea.entrypoints=web
+      - traefik.http.services.servicea.loadbalancer.server.port=3000
+
+  service-b:
+    build: ./services/service-b
+    environment:
+      PORT: 3001
+      RABBITMQ_URL: amqp://rabbitmq:5672
+      QUEUE_NAME: events.demo
+      DATABASE_URL: postgres://app:app@postgres:5432/appdb
+      KEYCLOAK_ISSUER: http://keycloak:8080/realms/mini321
+      JWKS_URI: http://keycloak:8080/realms/mini321/protocol/openid-connect/certs
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.serviceb.rule=PathPrefix(`/api/b`)
+      - traefik.http.routers.serviceb.entrypoints=web
+      - traefik.http.services.serviceb.loadbalancer.server.port=3001
+
+  status:
+    build: ./services/status
+    environment:
+      PORT: 3002
+      CHECKS: |
+        traefik=http://traefik:8080/api/rawdata
+        keycloak=http://keycloak:8080/health/ready
+        service-a=http://service-a:3000/health
+        service-b=http://service-b:3001/health
+        rabbitmq=http://rabbitmq:15672/api/healthchecks/node
+        postgres=tcp://postgres:5432
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.status.rule=PathPrefix(`/status`)
+      - traefik.http.routers.status.entrypoints=web
+      - traefik.http.services.status.loadbalancer.server.port=3002

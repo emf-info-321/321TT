@@ -1,0 +1,10 @@
+{
+  "name": "service-a",
+  "type": "module",
+  "dependencies": {
+    "amqplib": "^0.10.4",
+    "express": "^4.19.2",
+    "express-jwt": "^8.4.1",
+    "jwks-rsa": "^3.1.0"
+  }
+}
