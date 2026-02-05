@@ -30,7 +30,7 @@ async function initRabbit() {
   await channel.assertQueue(QUEUE_NAME, { durable: true });
 }
 
-app.get("/health", async (req, res) => {
+app.get("/api/a/health", async (req, res) => {
   res.json({
     status: "UP",
     service: "service-a",
