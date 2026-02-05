@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Mini321 - Keycloak client</title>
+  <style>
+    body { font-family: system-ui, Arial, sans-serif; margin: 24px; }
+    button { margin-right: 8px; }
+    pre { background: #f6f8fa; padding: 12px; border-radius: 8px; overflow:auto; }
+    .row { display:flex; gap:16px; flex-wrap:wrap; align-items:center; }
+    .pill { padding: 2px 8px; border-radius: 999px; background:#eee; }
+  </style>
+</head>
+<body>
+  <h1>Mini321 – Keycloak Web Login</h1>
+
+  <div class="row">
+    <span>Auth: <strong id="authState" class="pill">unknown</strong></span>
+    <span>User: <strong id="username">-</strong></span>
+  </div>
+
+  <p class="row">
+    <button id="btnLogin">Login</button>
+    <button id="btnLogout">Logout</button>
+    <button id="btnRefresh">Refresh token</button>
+    <button id="btnCallApi">Call API (POST /api/a/action)</button>
+  </p>
+
+  <h3>Tokens (debug)</h3>
+  <pre id="tokens">-</pre>
+
+  <h3>API response</h3>
+  <pre id="apiResult">-</pre>
+
+  <!-- keycloak-js (CDN). Si jamais le CDN bloque dans ton réseau, dis-moi et je te donne une alternative. -->
+  <script src="https://cdn.jsdelivr.net/npm/keycloak-js@25.0.6/dist/keycloak.min.js"></script>
+
+  <script>
+    // === CONFIG ===
+    const keycloak = new Keycloak({
+      url: "http://localhost:8082",
+      realm: "mini321",
+      clientId: "mini321-client",
+    });
+
+    const elAuthState = document.getElementById("authState");
+    const elUsername = document.getElementById("username");
+    const elTokens = document.getElementById("tokens");
+    const elApi = document.getElementById("apiResult");
+
+    function setAuthUI(isAuth) {
+      elAuthState.textContent = isAuth ? "authenticated" : "anonymous";
+      elAuthState.style.background = isAuth ? "#d1fae5" : "#fee2e2";
+      elUsername.textContent = isAuth ? (keycloak.tokenParsed?.preferred_username ?? "-") : "-";
+      elTokens.textContent = isAuth ? JSON.stringify({
+        access_token: keycloak.token,
+        refresh_token: keycloak.refreshToken,
+        id_token: keycloak.idToken,
+        parsed: keycloak.tokenParsed
+      }, null, 2) : "-";
+    }
+
+    async function init() {
+      // check-sso = ne force pas le login (tu restes sur la page), mais récupère la session si déjà loggé
+      const authenticated = await keycloak.init({
+        onLoad: "check-sso",
+        pkceMethod: "S256",
+        // IMPORTANT: doit correspondre à une Redirect URI autorisée dans Keycloak
+        redirectUri: window.location.origin + window.location.pathname
+      });
+
+      setAuthUI(authenticated);
+
+      // (optionnel) rafraîchissement auto toutes les 10s si token proche d’expirer
+      setInterval(async () => {
+        if (!keycloak.authenticated) return;
+        try {
+          // 30 = refresh si token expire dans < 30 secondes
+          const refreshed = await keycloak.updateToken(30);
+          if (refreshed) setAuthUI(true);
+        } catch (e) {
+          console.warn("Token refresh failed, logging out", e);
+          keycloak.logout({ redirectUri: window.location.origin + window.location.pathname });
+        }
+      }, 10000);
+    }
+
+    document.getElementById("btnLogin").addEventListener("click", () => {
+      keycloak.login({ redirectUri: window.location.origin + window.location.pathname });
+    });
+
+    document.getElementById("btnLogout").addEventListener("click", () => {
+      keycloak.logout({ redirectUri: window.location.origin + window.location.pathname });
+    });
+
+    document.getElementById("btnRefresh").addEventListener("click", async () => {
+      if (!keycloak.authenticated) return alert("Pas connecté.");
+      try {
+        await keycloak.updateToken(0); // force refresh si possible
+        setAuthUI(true);
+        alert("Token OK");
+      } catch (e) {
+        alert("Refresh impossible (session expirée ?)");
+      }
+    });
+
+    document.getElementById("btnCallApi").addEventListener("click", async () => {
+      elApi.textContent = "Calling API...";
+      if (!keycloak.authenticated) {
+        elApi.textContent = "Not authenticated. Click Login first.";
+        return;
+      }
+
+      // Ton API est exposée via Traefik sur :8080
+      // (route protégée dans ton projet)
+      try {
+        const resp = await fetch("http://localhost:8080/api/a/action", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + keycloak.token,
+          },
+          body: JSON.stringify({ value: 42 })
+        });
+
+        const text = await resp.text();
+        elApi.textContent = `HTTP ${resp.status}\n\n${text}`;
+      } catch (e) {
+        elApi.textContent = "Fetch failed: " + e;
+      }
+    });
+
+    init().catch(err => {
+      console.error(err);
+      elApi.textContent = "Keycloak init error: " + err;
+    });
+  </script>
+</body>
+</html>
