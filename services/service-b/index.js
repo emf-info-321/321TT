@@ -67,7 +67,7 @@ app.get("/health", async (req, res) => {
   res.json({ status: "UP", service: "service-b", db, rabbitmq: channel ? "UP" : "DOWN", time: new Date().toISOString() });
 });
 
-app.get("/api/b/events", async (req, res) => {
+app.get("/events", async (req, res) => {
   const r = await pool.query("SELECT * FROM events ORDER BY ts DESC LIMIT 50");
   res.json(r.rows);
 });

@@ -6,6 +6,11 @@ services:
       - ./traefik/traefik.yml:/traefik.yml:ro
     command:
       - --configFile=/traefik.yml
+      - --log.level=DEBUG
+      - --accesslog=true
+      - --providers.docker=true
+      - --providers.docker.endpoint=unix:///var/run/docker.sock
+      - --providers.docker.exposedByDefault=false
     ports:
       - "8080:80"
       - "8081:8080"
@@ -58,8 +63,8 @@ services:
       PORT: 3000
       RABBITMQ_URL: amqp://rabbitmq:5672
       QUEUE_NAME: events.demo
-      KEYCLOAK_ISSUER: http://keycloak:8080/realms/mini321
-      JWKS_URI: http://keycloak:8080/realms/mini321/protocol/openid-connect/certs
+      KEYCLOAK_ISSUER: http://localhost:8082/realms/mini321  #KEYCLOAK_ISSUER: http://keycloak:8080/realms/mini321
+      JWKS_URI: http://keycloak:8080/realms/mini321/protocol/openid-connect/certs #access keycloak from contenair
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -69,6 +74,8 @@ services:
       - traefik.enable=true
       - traefik.http.routers.servicea.rule=PathPrefix(`/api/a`)
       - traefik.http.routers.servicea.entrypoints=web
+      - traefik.http.middlewares.servicea-stripprefix.stripprefix.prefixes=/api/a
+      - traefik.http.routers.servicea.middlewares=servicea-stripprefix
       - traefik.http.services.servicea.loadbalancer.server.port=3000
 
   service-b:
@@ -78,7 +85,7 @@ services:
       RABBITMQ_URL: amqp://rabbitmq:5672
       QUEUE_NAME: events.demo
       DATABASE_URL: postgres://app:app@postgres:5432/appdb
-      KEYCLOAK_ISSUER: http://keycloak:8080/realms/mini321
+      KEYCLOAK_ISSUER: http://localhost:8082/realms/mini321  #KEYCLOAK_ISSUER: http://keycloak:8080/realms/mini321
       JWKS_URI: http://keycloak:8080/realms/mini321/protocol/openid-connect/certs
     depends_on:
       rabbitmq:
@@ -91,6 +98,8 @@ services:
       - traefik.enable=true
       - traefik.http.routers.serviceb.rule=PathPrefix(`/api/b`)
       - traefik.http.routers.serviceb.entrypoints=web
+      - traefik.http.middlewares.serviceb-stripprefix.stripprefix.prefixes=/api/b
+      - traefik.http.routers.serviceb.middlewares=serviceb-stripprefix
       - traefik.http.services.serviceb.loadbalancer.server.port=3001
 
   
