@@ -10,7 +10,8 @@ Il illustre une **architecture distribuée standardisée** utilisée par tous le
 - plusieurs **services métier**
 - un **message broker**
 - un **stockage persistant**
-- des **health checks** et un **status global**
+- des **health checks** et un **status global** qui sont monitoré par prometheus
+- grafana pour monitorer et alerter en cas de problème
 
 Le projet est entièrement lançable en local via **Docker Compose**.
 
