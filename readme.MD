@@ -104,11 +104,14 @@ docker compose up --build
 ### 4.2 Services exposés
 | Service | URL | Remarque |
 |------|----|---------|
-| API Gateway | http://localhost:8080 | Point d’entrée unique |
 | Traefik dashboard | http://localhost:8081 | Diagnostic (interne) |
 | Keycloak | http://localhost:8082 | Administration / login |
 | RabbitMQ UI | http://localhost:15672 | Diagnostic |
-| Status global | http://localhost:8080/status | Agrégation health |
+| Grafana | http://localhost:3002 | Reporting / alerting |
+| Prometheus | http://localhost:9090 | Metrics |
+| APIGW | http://localhost:8080 | Ne retourne rien ! |
+| ServiceA | http://localhost:8080/api/a/health | health de api a |
+| ServiceB | http://localhost:8080/api/b/health | health de api b |
 
 ---
 
