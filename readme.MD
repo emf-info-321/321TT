@@ -74,10 +74,12 @@ flowchart LR
 - Service métier 2 : *consumer*
 - Message broker : **RabbitMQ**
 - Base de données : **PostgreSQL**
+- Monitoring avec prometheus
+- Reporting avec grafana
 
 **Règles d’architecture :**
 - Un **point d’entrée unique** via l’API Gateway
-- Chaque service expose `/health`
+- Chaque service expose `/health /ready /health /metrics /info`
 - Communication asynchrone via RabbitMQ
 - Tous les services sont lancés ensemble avec Docker Compose
 
