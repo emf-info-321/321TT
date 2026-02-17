@@ -101,5 +101,18 @@ services:
       - traefik.http.middlewares.serviceb-stripprefix.stripprefix.prefixes=/api/b
       - traefik.http.routers.serviceb.middlewares=serviceb-stripprefix
       - traefik.http.services.serviceb.loadbalancer.server.port=3001
-
+  prometheus:
+    image: prom/prometheus
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - service-b
+  grafana:
+    image: grafana/grafana
+    ports:
+      - "3002:3000"
+    depends_on:
+      - prometheus
   
